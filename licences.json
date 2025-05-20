@@ -1,1 +1,30 @@
-{"EXODUS-L3TYOW":{"expiry":"1 week","claimed":false},"EXODUS-U7QIJX":{"expiry":"1 week","claimed":false},"EXODUS-J6B0PE":{"expiry":"5 year","claimed":false},"EXODUS-NXDU8V":{"expiry":"5 year","claimed":false},"EXODUS-M7VL10":{"expiry":"5 year","claimed":false},"EXODUS-HNKCWE":{"expiry":"5 year","claimed":false},"EXODUS-QGWM8W":{"expiry":"5 year","claimed":false}}
+{
+  "EXODUS-L3TYOW": {
+    "expiry": "1 week",
+    "claimed": false
+  },
+  "EXODUS-U7QIJX": {
+    "expiry": "1 week",
+    "claimed": false
+  },
+  "EXODUS-J6B0PE": {
+    "expiry": "5 year",
+    "claimed": false
+  },
+  "EXODUS-NXDU8V": {
+    "expiry": "5 year",
+    "claimed": false
+  },
+  "EXODUS-M7VL10": {
+    "expiry": "5 year",
+    "claimed": false
+  },
+  "EXODUS-HNKCWE": {
+    "expiry": "5 year",
+    "claimed": false
+  },
+  "EXODUS-QGWM8W": {
+    "expiry": "5 year",
+    "claimed": true
+  }
+}
