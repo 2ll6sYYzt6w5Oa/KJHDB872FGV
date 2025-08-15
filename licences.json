@@ -1,1 +1,65 @@
-{"EXODUS-L3TYOW":{"expiry":"1 week","claimed":true},"EXODUS-U7QIJX":{"expiry":"1 week","claimed":false},"EXODUS-J6B0PE":{"expiry":"5 year","claimed":false},"EXODUS-NXDU8V":{"expiry":"5 year","claimed":false},"EXODUS-M7VL10":{"expiry":"5 year","claimed":false},"EXODUS-HNKCWE":{"expiry":"5 year","claimed":false},"EXODUS-QGWM8W":{"expiry":"5 year","claimed":true},"EXODUS-XCRL9K":{"expiry":"1 day","claimed":false},"EXODUS-GFH0X2":{"expiry":"10 second","claimed":false},"EXODUS-VZK9XC":{"expiry":"1 second","claimed":false},"EXODUS-J69EZ6":{"expiry":"1 second","claimed":false},"EXODUS-K8G5K4":{"expiry":"1 second","claimed":false}}
+{
+  "SLATE-ADMIN-001": {
+    "expiry": "lifetime",
+    "claimed": true,
+    "product": "slate",
+    "created": 1670000000,
+    "max_activations": 1
+  },
+  "SLATE-PREM-002": {
+    "expiry": "1 year",
+    "claimed": true,
+    "product": "slate",
+    "created": 1675000000,
+    "max_activations": 1
+  },
+  "SLATE-L3TYOW": {
+    "expiry": "3933335",
+    "claimed": true,
+    "product": "slate",
+    "created": 1670000000,
+    "max_activations": 1
+  },
+  "SLATE-X8F2K9": {
+    "expiry": "1 month",
+    "claimed": false,
+    "product": "slate",
+    "created": 1680000000,
+    "max_activations": 1
+  },
+  "SLATE-M5P7R3": {
+    "expiry": "3 months",
+    "claimed": false,
+    "product": "slate",
+    "created": 1680000000,
+    "max_activations": 1
+  },
+  "SLATE-Q1W9E4": {
+    "expiry": "1 week",
+    "claimed": false,
+    "product": "slate",
+    "created": 1680000000,
+    "max_activations": 1
+  },
+  "SLATE-B4N7V6": {
+    "expiry": "1 day",
+    "claimed": false,
+    "product": "slate",
+    "created": 1680000000,
+    "max_activations": 1
+  },
+  "SLATE-T9Y2H8": {
+    "expiry": "1 year",
+    "claimed": false,
+    "product": "slate",
+    "created": 1680000000,
+    "max_activations": 1
+  },
+  "SLATE-K6J8G1": {
+    "expiry": "lifetime",
+    "claimed": false,
+    "product": "slate",
+    "created": 1680000000,
+    "max_activations": 1
+  }
+}
