@@ -6,29 +6,25 @@
     "products": {
       "slate": {
         "key": "SLATE-X8F2K9",
-        "expiry": "1 month",
+        "expiry": 1755300935662,
         "activated": 1755300935662
       }
     },
-    "isAdmin": true
+    "roles": ["admin"]
   },
-  "gay": {
-    "password": "1234",
-    "email": "1234@co.com",
-    "phone": "8324443823",
-    "products": {
-      "slate": {
-        "key": "SLATE-L3TYOW",
-        "expiry": "3933335",
-        "activated": 1670000000
-      }
-    }
+  "reseller1": {
+    "password": "resellerPass!",
+    "email": "reseller@example.com",
+    "phone": "5553334444",
+    "products": {},
+    "roles": ["reseller"]
   },
-  "user2": {
-    "password": "Complex!Pass456",
-    "email": "user2@example.com",
-    "phone": "5551234567",
-    "products": {}
+  "user1": {
+    "password": "userPass",
+    "email": "user1@example.com",
+    "phone": "5557778888",
+    "products": {},
+    "roles": ["user"]
   },
   "premium_user": {
     "password": "GoldTier789$",
@@ -37,9 +33,10 @@
     "products": {
       "slate": {
         "key": "SLATE-PREM-002",
-        "expiry": "1 year",
+        "expiry": 1890000000,
         "activated": 1675000000
       }
-    }
+    },
+    "roles": ["user", "premium"]
   }
 }
