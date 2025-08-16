@@ -1,0 +1,568 @@
+/* ===========================
+   CONFIG
+=========================== */
+const CONFIG = {
+  ACCOUNTS_URL: "https://raw.githubusercontent.com/2ll6sYYzt6w5Oa/KJHDB872FGV/main/accounts.json",
+  ACCOUNTS_API_URL: "https://api.github.com/repos/2ll6sYYzt6w5Oa/KJHDB872FGV/contents/accounts.json",
+  LICENSE_URL: "https://raw.githubusercontent.com/2ll6sYYzt6w5Oa/KJHDB872FGV/main/licences.json",
+  LICENSE_API_URL: "https://api.github.com/repos/2ll6sYYzt6w5Oa/KJHDB872FGV/contents/licences.json",
+  BOOTLOADER_URL: "https://raw.githubusercontent.com/2ll6sYYzt6w5Oa/KJHDB872FGV/main/bootloader.json",
+  GITHUB_TOKEN: "ghp_QMR \\ W4Zd6OJPdTr \\ RFgSmbUQPS \\8ON4ge4SLKyz" // (you said it's fine to embed)
+};
+
+/* ===========================
+   UTIL
+=========================== */
+const $ = (q,root=document)=>root.querySelector(q);
+const $$ = (q,root=document)=>[...root.querySelectorAll(q)];
+const toast = $('#toast');
+const showToast = (msg, ok=true)=>{ toast.textContent=msg; toast.className='toast show '+(ok?'ok':'err'); setTimeout(()=>toast.classList.remove('show'), 3000); };
+const b64e = s=> btoa(unescape(encodeURIComponent(s)));
+const b64d = s=> decodeURIComponent(escape(atob(s)));
+const nowSec = ()=> Math.floor(Date.now()/1000);
+const fmtRemaining = sec => {
+  if (sec<=0) return 'Expired';
+  const d=Math.floor(sec/86400), h=Math.floor((sec%86400)/3600), m=Math.floor((sec%3600)/60), s=Math.floor(sec%60);
+  return `${d?d+'d ':''}${h?h+'h ':''}${m?m+'m ':''}${s}s`;
+};
+const ONE_DAY = 86400;
+
+/* ===========================
+   GITHUB CONTENTS API
+=========================== */
+const GH = {
+  headers(){ return {'Accept':'application/vnd.github+json', 'Authorization':'token '+CONFIG.GITHUB_TOKEN}; },
+
+  // Read JSON using Raw URL (fast; no sha)
+  async getRaw(url){
+    const r = await fetch(url, {cache:'no-store'});
+    if(!r.ok) throw new Error('GET raw failed: '+r.status);
+    return r.json();
+  },
+
+  // Read JSON using Contents API (gets sha)
+  async getFile(apiUrl){
+    const r = await fetch(apiUrl, {headers:this.headers()});
+    if(!r.ok) throw new Error('GET file failed: '+r.status);
+    const j = await r.json();
+    const content = j.content ? JSON.parse(b64d(j.content)) : {};
+    return { sha: j.sha, content };
+  },
+
+  // Write JSON back with sha
+  async putFile(apiUrl, message, obj, sha){
+    const body = { message, content: b64e(JSON.stringify(obj, null, 2)), sha };
+    const r = await fetch(apiUrl, {
+      method:'PUT',
+      headers:{...this.headers(),'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    if(!r.ok) {
+      const t = await r.text().catch(()=> '');
+      throw new Error('PUT failed: '+r.status+' '+t);
+    }
+    return r.json();
+  },
+
+  // Safe update with conflict retry
+  async safeUpdate(apiUrl, message, mutator){
+    for(let tries=0; tries<3; tries++){
+      const {sha, content} = await this.getFile(apiUrl);
+      const updated = await mutator(structuredClone(content));
+      try{
+        return await this.putFile(apiUrl, `${message} @ ${new Date().toISOString()}`, updated, sha);
+      }catch(e){
+        if(String(e).includes('409') && tries<2){ await new Promise(r=>setTimeout(r,350)); continue; }
+        throw e;
+      }
+    }
+  }
+};
+
+/* ===========================
+   STATE
+=========================== */
+let currentUser = null;
+let currentRole = 'user'; // "user" | "reseller" | "admin"
+let expiryTicker = null;
+
+/* ===========================
+   ROLE / UI
+=========================== */
+function setBadge(){
+  const badge = $('#roleBadge');
+  const icon = currentRole==='admin' ? 'fa-crown' : (currentRole==='reseller' ? 'fa-star' : 'fa-user');
+  badge.className = 'badge ' + (currentRole==='admin'?'admin':(currentRole==='reseller'?'reseller':'')); 
+  badge.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${currentRole}</span>`;
+}
+
+function buildSidebarForRole(){
+  const nav = $('#sideNav');
+  // Remove prior role-only items
+  $$('#sideNav a[data-role]').forEach(a=>a.remove());
+
+  if(currentRole==='reseller'){
+    const a = document.createElement('a');
+    a.href='#'; a.dataset.target='tab-keys'; a.dataset.role='reseller';
+    a.innerHTML = `<i class="fa-solid fa-key"></i><span class="txt">Keys</span>`;
+    nav.appendChild(a);
+  }
+  if(currentRole==='admin'){
+    const a = document.createElement('a');
+    a.href='#'; a.dataset.target='tab-admin'; a.dataset.role='admin';
+    a.innerHTML = `<i class="fa-solid fa-shield-halved"></i><span class="txt">Admin</span>`;
+    nav.appendChild(a);
+  }
+
+  // (Re)bind tab clicks
+  $$('#sideNav a').forEach(a=>{
+    a.onclick = (e)=>{ e.preventDefault(); switchTab(a.dataset.target); $$('#sideNav a').forEach(x=>x.classList.remove('active')); a.classList.add('active'); };
+  });
+}
+
+function switchTab(id){
+  $$('.tabcontent').forEach(t=>t.classList.remove('active'));
+  $( '#'+id ).classList.add('active');
+  if (id === 'tab-settings') {
+    refreshSettings();
+  }
+}
+
+/* ===========================
+   ACCOUNTS FORMAT (NEW)
+   {
+     "<username>": {
+        "password": "...",
+        "email": "...",
+        "phone": "...",
+        "products": { "slate": { "key": "...", "expiry": <epochSec>, "activated": <epochSec> } },
+        "roles": ["user" | "reseller" | "admin"]  // single role stored as 1-length array
+     }
+   }
+=========================== */
+
+/* ===========================
+   LICENSES FORMAT (NEW)
+   "<KEY>": {
+     "product": "slate",
+     "duration": <seconds>,
+     "created": "YYYY-MM-DD",
+     "generatedBy": "<username>",
+     "claimed": <bool>,
+     "claimedBy": "<username?>",
+     "claimedAt": "<ISO?>"
+   }
+=========================== */
+
+/* ===========================
+   AUTH
+=========================== */
+async function login(){
+  const u = $('#li-user').value.trim();
+  const p = $('#li-pass').value;
+  if(!u || !p){ showToast('Enter username and password', false); return; }
+  let accounts;
+  try{ accounts = await GH.getRaw(CONFIG.ACCOUNTS_URL); }
+  catch{ showToast('Failed to load accounts.json', false); return; }
+  const rec = accounts[u];
+  if(!rec || rec.password!==p){ showToast('Invalid credentials', false); return; }
+
+  // derive role (new format first; fallback old)
+  let role = 'user';
+  if (Array.isArray(rec.roles) && rec.roles.length) role = rec.roles[0];
+  else if (rec.isAdmin) role = 'admin';
+  else if (rec.role) role = rec.role;
+
+  currentUser = u;
+  currentRole = role;
+  $('#who').textContent = u;
+
+  // show app
+  $('#authScreen').style.display='none';
+  $('#app').style.display='flex';
+
+  setBadge();
+  buildSidebarForRole();
+  await refreshUserProduct();
+  if (currentRole==='admin') { await renderAccounts(); await renderAllKeys(); }
+  startExpiryTick();
+  showToast(`Welcome, ${u}!`);
+}
+
+async function createAccount(){
+  const u = $('#cr-user').value.trim();
+  const pw = $('#cr-pass').value;
+  const em = $('#cr-mail').value.trim();
+  const ph = $('#cr-phone').value.trim();
+  if(!u || !pw || !em || !ph){ showToast('Fill all fields', false); return; }
+
+  try{
+    await GH.safeUpdate(CONFIG.ACCOUNTS_API_URL, `Create account ${u}`, (acc)=>{
+      if(acc[u]) throw new Error('Username already exists');
+      acc[u] = { password: pw, email: em, phone: ph, products: {}, roles: ["user"] };
+      return acc;
+    });
+    showToast('Account created. You can log in now.');
+    $('#createCard').style.display='none';
+    $('#loginCard').style.display='block';
+  }catch(e){ showToast(e.message || 'Create failed', false); }
+}
+
+/* ===========================
+   USER PRODUCT / EXPIRY
+=========================== */
+async function getUserRecord(username){
+  const acc = await GH.getRaw(CONFIG.ACCOUNTS_URL);
+  return acc[username]||null;
+}
+
+async function refreshUserProduct(){
+  const rec = await getUserRecord(currentUser);
+  const slate = rec?.products?.slate;
+  const st = $('#slate-status'), exp = $('#slate-exp'), launch = $('#btn-launch');
+
+  if(!slate){
+    st.className='status inactive';
+    st.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> Not Activated`;
+    exp.textContent = 'No active license';
+    launch.disabled=true;
+    return;
+  }
+  st.className='status active';
+  st.innerHTML = `<i class="fa-solid fa-circle-check"></i> Activated`;
+  const remain = (typeof slate.expiry==='number' ? slate.expiry : (nowSec()+ONE_DAY*7)) - nowSec();
+  exp.textContent = 'Time remaining: ' + fmtRemaining(Math.max(0, remain));
+  launch.disabled = remain<=0;
+}
+
+function startExpiryTick(){
+  if(expiryTicker) clearInterval(expiryTicker);
+  expiryTicker = setInterval(async ()=>{
+    if(!currentUser) return;
+    const rec = await getUserRecord(currentUser);
+    const slate = rec?.products?.slate;
+    if(!slate){ $('#slate-exp').textContent='No active license'; $('#btn-launch').disabled=true; return; }
+    const remain = (typeof slate.expiry==='number' ? slate.expiry : nowSec()) - nowSec();
+    $('#slate-exp').textContent = 'Time remaining: ' + fmtRemaining(Math.max(0, remain));
+    if(remain<=0){ await GH.safeUpdate(CONFIG.ACCOUNTS_API_URL, `Expire ${currentUser} slate`, (acc)=>{ if(acc[currentUser]?.products?.slate) delete acc[currentUser].products.slate; return acc; }); await refreshUserProduct(); showToast('License expired', false); }
+  }, 1000);
+}
+
+/* ===========================
+   ACTIVATE KEY
+=========================== */
+async function activateKey(){
+  const el = $('#ak-key');
+  const key = el.value.trim().toUpperCase();
+  const msg = $('#ak-msg');
+  if(!key){ msg.style.color='var(--warn)'; msg.textContent='Enter a key'; return; }
+
+  let lic;
+  try{ lic = await GH.getRaw(CONFIG.LICENSE_URL); }
+  catch{ msg.style.color='var(--err)'; msg.textContent='Failed to load licences.json'; return; }
+
+  const item = lic[key];
+  if(!item){ msg.style.color='var(--err)'; msg.textContent='Invalid key'; return; }
+  if(item.claimed){ msg.style.color='var(--err)'; msg.textContent='Key already claimed'; return; }
+
+  try{
+    // mark key claimed
+    await GH.safeUpdate(CONFIG.LICENSE_API_URL, `Claim key ${key} by ${currentUser}`, (all)=>{
+      if(!all[key] || all[key].claimed) throw new Error('Key already claimed');
+      all[key].claimed = true;
+      all[key].claimedBy = currentUser;
+      all[key].claimedAt = new Date().toISOString();
+      return all;
+    });
+
+    // attach product to user
+    await GH.safeUpdate(CONFIG.ACCOUNTS_API_URL, `Activate ${item.product} for ${currentUser}`, (acc)=>{
+      acc[currentUser] = acc[currentUser] || {};
+      acc[currentUser].products = acc[currentUser].products || {};
+      const expiry = nowSec() + (item.duration || 0);
+      acc[currentUser].products[item.product] = { key, expiry, activated: nowSec() };
+      return acc;
+    });
+
+    msg.style.color='var(--ok)'; msg.textContent='Activated!';
+    setTimeout(async ()=>{ closeModal('#modal-activate'); await refreshUserProduct(); }, 800);
+  }catch(e){ msg.style.color='var(--err)'; msg.textContent = e.message || 'Activation failed'; }
+}
+
+/* ===========================
+   RESELLER: GENERATE KEYS
+=========================== */
+function rand4(){ return Math.random().toString(36).slice(2,6).toUpperCase().replace(/[^A-Z0-9]/g,'A'); }
+
+async function generateKeys(){
+  if(currentRole!=='reseller' && currentRole!=='admin'){ showToast('Not allowed', false); return; }
+  const prefix = ($('#g-prefix').value || 'SLATE').toUpperCase().replace(/[^A-Z0-9-]/g,'').slice(0,18);
+  const count = Math.max(1, Math.min(100, parseInt($('#g-count').value)||1));
+  const days = Math.max(1, parseInt($('#g-days').value)||7);
+  const product = $('#g-product').value || 'slate';
+  const today = new Date().toISOString().slice(0,10);
+
+  try{
+    await GH.safeUpdate(CONFIG.LICENSE_API_URL, `Generate ${count} ${product} keys by ${currentUser}`, (all)=>{
+      for(let i=0;i<count;i++){
+        let k;
+        do{ k = `${prefix}-${rand4()}-${rand4()}-${rand4()}`; } while(all[k]);
+        all[k] = {
+          product, duration: days*ONE_DAY, created: today,
+          generatedBy: currentUser, claimed: false
+        };
+      }
+      return all;
+    });
+    showToast(`Generated ${count} key${count>1?'s':''}`);
+    if(currentRole==='admin') await renderAllKeys(); // If admin on keys tab too
+  }catch(e){ showToast(e.message || 'Generation failed', false); }
+}
+
+/* ===========================
+   ADMIN: ACCOUNTS
+=========================== */
+async function renderAccounts(){
+  const tbody = $('#acctRows');
+  tbody.innerHTML = '';
+  const acc = await GH.getRaw(CONFIG.ACCOUNTS_URL);
+  Object.entries(acc).forEach(([u,a])=>{
+    const role = Array.isArray(a.roles) && a.roles[0] ? a.roles[0] : (a.isAdmin?'admin':(a.role||'user'));
+    const prodTxt = a.products?.slate ? 'Slate (Active)' : '—';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${u}</td>
+      <td><span class="role ${role}">${role}</span></td>
+      <td>${a.email||''}</td>
+      <td>${prodTxt}</td>
+      <td>
+        <button class="btn mini out" data-edit="${u}"><i class="fa-solid fa-pen"></i></button>
+        <button class="btn mini out" data-del="${u}" style="margin-left:6px"><i class="fa-solid fa-trash"></i></button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+
+  // bind actions
+  $$('button[data-edit]').forEach(b=> b.onclick = ()=> openEdit(b.dataset.edit));
+  $$('button[data-del]').forEach(b=> b.onclick = ()=> deleteAccount(b.dataset.del));
+}
+
+function openEdit(username){
+  (async ()=>{
+    const acc = await GH.getRaw(CONFIG.ACCOUNTS_URL);
+    const a = acc[username];
+    $('#ed-user').value = username;
+    $('#ed-mail').value = a.email||'';
+    $('#ed-phone').value = a.phone||'';
+    $('#ed-pass').value = a.password||'';
+    const role = Array.isArray(a.roles) && a.roles[0] ? a.roles[0] : (a.isAdmin?'admin':(a.role||'user'));
+    $('#ed-role').value = role;
+    openModal('#modal-edit');
+  })();
+}
+
+async function saveAccount(){
+  const u = $('#ed-user').value;
+  const role = $('#ed-role').value;
+  try{
+    await GH.safeUpdate(CONFIG.ACCOUNTS_API_URL, `Edit account ${u}`, (acc)=>{
+      if(!acc[u]) throw new Error('User not found');
+      acc[u].email = $('#ed-mail').value.trim();
+      acc[u].phone = $('#ed-phone').value.trim();
+      acc[u].password = $('#ed-pass').value;
+      acc[u].roles = [role]; // single-role policy
+      // cleanup legacy flags
+      delete acc[u].isAdmin; acc[u].role = role;
+      return acc;
+    });
+    closeModal('#modal-edit');
+    await renderAccounts();
+    if(u===currentUser){ currentRole = role; setBadge(); buildSidebarForRole(); }
+    showToast('Account updated');
+  }catch(e){ showToast(e.message || 'Update failed', false); }
+}
+
+async function deleteAccount(username){
+  if(username===currentUser){ showToast('You cannot delete yourself', false); return; }
+  if(!confirm(`Delete "${username}"? This cannot be undone.`)) return;
+  try{
+    await GH.safeUpdate(CONFIG.ACCOUNTS_API_URL, `Delete account ${username}`, (acc)=>{ delete acc[username]; return acc; });
+    await renderAccounts();
+    showToast('Account deleted');
+  }catch(e){ showToast(e.message || 'Delete failed', false); }
+}
+
+/* ===========================
+   ADMIN: KEYS TABLE
+=========================== */
+async function renderAllKeys(){
+  const tbody = $('#keysRows');
+  tbody.innerHTML = '';
+  const all = await GH.getRaw(CONFIG.LICENSE_URL);
+  Object.entries(all).forEach(([key, v])=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="font-family:ui-monospace,monospace;font-weight:800">${key}</td>
+      <td>${v.product}</td>
+      <td>${Math.round((v.duration||0)/ONE_DAY)}</td>
+      <td>${v.generatedBy||'—'}</td>
+      <td>${v.claimed?'Yes':'No'}</td>
+      <td>${v.claimedBy||'—'}</td>
+      <td>${v.created||'—'}</td>
+      <td>
+        <button class="btn mini out" data-kedit="${key}"><i class="fa-solid fa-sliders"></i></button>
+        <button class="btn mini out" data-kdel="${key}" style="margin-left:6px"><i class="fa-solid fa-trash"></i></button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+  $$('button[data-kedit]').forEach(b=> b.onclick = ()=> editKeyDuration(b.dataset.kedit));
+  $$('button[data-kdel]').forEach(b=> b.onclick = ()=> deleteKey(b.dataset.kdel));
+}
+
+async function editKeyDuration(key){
+  const daysStr = prompt(`Set duration (days) for ${key}:`, '7');
+  if(daysStr==null) return;
+  const days = Math.max(1, parseInt(daysStr)||7);
+  try{
+    await GH.safeUpdate(CONFIG.LICENSE_API_URL, `Edit key ${key} duration`, (all)=>{
+      if(!all[key]) throw new Error('Key not found');
+      all[key].duration = days * ONE_DAY;
+      return all;
+    });
+    showToast('Key updated');
+    await renderAllKeys();
+  }catch(e){ showToast(e.message || 'Update failed', false); }
+}
+
+async function deleteKey(key){
+  if(!confirm(`Delete key "${key}"? This cannot be undone.`)) return;
+  try{
+    await GH.safeUpdate(CONFIG.LICENSE_API_URL, `Delete key ${key}`, (all)=>{ delete all[key]; return all; });
+    showToast('Key deleted');
+    await renderAllKeys();
+  }catch(e){ showToast(e.message || 'Delete failed', false); }
+}
+
+/* ===========================
+   BOOT / LAUNCH
+=========================== */
+async function launchSlate(){
+  const rec = await getUserRecord(currentUser);
+  const prod = rec?.products?.slate;
+  if(!prod){ showToast('No active Slate license', false); return; }
+  if((prod.expiry||0) <= nowSec()){ showToast('License expired', false); return; }
+
+  let boot;
+  try{ boot = await GH.getRaw(CONFIG.BOOTLOADER_URL); }
+  catch{ showToast('Failed to load bootloader.json', false); return; }
+  
+  try {
+    // Fetch all resources in parallel
+    const [htmlContent, cssContent, jsContent] = await Promise.all([
+      fetch(boot.html).then(r => r.text()),
+      fetch(boot.css).then(r => r.text()),
+      fetch(boot.javascript).then(r => r.text())
+    ]);
+    
+    const w = window.open('', '_blank');
+    if(!w){ showToast('Popup blocked; allow popups', false); return; }
+    w.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Slate</title>
+          <style>${cssContent}</style>
+        </head>
+        <body>${htmlContent}<script>${jsContent}<\/script></body>
+      </html>
+    `);
+    w.document.close();
+    showToast('Launched Slate');
+  } catch(e) {
+    showToast('Failed to load boot resources: ' + (e.message || 'Error'), false);
+  }
+}
+
+/* ===========================
+   SETTINGS
+=========================== */
+async function refreshSettings() {
+  if (!currentUser) return;
+  const rec = await getUserRecord(currentUser);
+  if (rec) {
+    $('#set-email').value = rec.email || '';
+    $('#set-phone').value = rec.phone || '';
+    $('#set-pass').value = ''; // Clear password field
+  }
+}
+
+async function saveSettings() {
+  const email = $('#set-email').value.trim();
+  const phone = $('#set-phone').value.trim();
+  const newPass = $('#set-pass').value;
+
+  if (!email) { 
+    showToast('Email is required', false); 
+    return; 
+  }
+
+  try {
+    await GH.safeUpdate(CONFIG.ACCOUNTS_API_URL, `Update settings for ${currentUser}`, (acc)=>{
+      if (!acc[currentUser]) throw new Error('User not found');
+      acc[currentUser].email = email;
+      acc[currentUser].phone = phone;
+      if (newPass) {
+        acc[currentUser].password = newPass;
+      }
+      return acc;
+    });
+    showToast('Settings saved');
+  } catch(e) {
+    showToast(e.message || 'Failed to save settings', false);
+  }
+}
+
+/* ===========================
+   MODALS
+=========================== */
+function openModal(sel){ 
+  $(sel).classList.add('active'); 
+  // Clear activate modal when opened
+  if (sel === '#modal-activate') {
+    $('#ak-key').value = '';
+    $('#ak-msg').textContent = '';
+  }
+}
+function closeModal(sel){ $(sel).classList.remove('active'); }
+
+/* ===========================
+   EVENTS
+=========================== */
+$('#btn-login').onclick = login;
+$('#btn-logout').onclick = ()=>{ currentUser=null; currentRole='user'; clearInterval(expiryTicker); $('#app').style.display='none'; $('#authScreen').style.display='grid'; showToast('Logged out'); };
+$('#goto-create').onclick = ()=>{ $('#loginCard').style.display='none'; $('#createCard').style.display='block'; };
+$('#back-login').onclick = ()=>{ $('#createCard').style.display='none'; $('#loginCard').style.display='block'; };
+$('#btn-create').onclick = createAccount;
+
+$('#btn-activate').onclick = ()=> openModal('#modal-activate');
+$('#btn-activate-2').onclick = ()=> openModal('#modal-activate');
+$('#ak-activate').onclick = activateKey;
+$$('[data-close]').forEach(b=> b.onclick = ()=> closeModal(b.closest('.modal').id ? '#'+b.closest('.modal').id : '#modal'));
+document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ $$('.modal.active').forEach(m=>m.classList.remove('active')); } });
+
+$('#btn-buy').onclick = ()=> window.open('https://example.com/shop','_blank');
+$('#btn-launch').onclick = launchSlate;
+
+$('#btn-gen').onclick = generateKeys;
+
+$('#ed-save').onclick = saveAccount;
+
+$('#btn-save-settings').onclick = saveSettings;
+
+/* Clicking sidebar items handled in buildSidebarForRole() after login */
+
+/* ===========================
+   INIT (public view)
+=========================== */
+switchTab('tab-dashboard');
