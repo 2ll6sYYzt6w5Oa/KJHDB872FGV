@@ -38,20 +38,5 @@
       "user",
       "premium"
     ]
-  },
-  "sss": {
-    "password": "sss",
-    "email": "sss",
-    "phone": "sss",
-    "products": {
-      "slate": {
-        "key": "SLATE-POZQ-NZNW-3QID",
-        "expiry": 1755495127,
-        "activated": 1755322327
-      }
-    },
-    "roles": [
-      "user"
-    ]
   }
 }
