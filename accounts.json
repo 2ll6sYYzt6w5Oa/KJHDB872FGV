@@ -14,15 +14,6 @@
       "admin"
     ]
   },
-  "reseller1": {
-    "password": "resellerPass!",
-    "email": "reseller@example.com",
-    "phone": "5553334444",
-    "products": {},
-    "roles": [
-      "reseller"
-    ]
-  },
   "user1": {
     "password": "userPass",
     "email": "user1@example.com",
