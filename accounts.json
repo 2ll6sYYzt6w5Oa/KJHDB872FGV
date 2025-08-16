@@ -10,21 +10,27 @@
         "activated": 1755300935662
       }
     },
-    "roles": ["admin"]
+    "roles": [
+      "admin"
+    ]
   },
   "reseller1": {
     "password": "resellerPass!",
     "email": "reseller@example.com",
     "phone": "5553334444",
     "products": {},
-    "roles": ["reseller"]
+    "roles": [
+      "reseller"
+    ]
   },
   "user1": {
     "password": "userPass",
     "email": "user1@example.com",
     "phone": "5557778888",
     "products": {},
-    "roles": ["user"]
+    "roles": [
+      "user"
+    ]
   },
   "premium_user": {
     "password": "GoldTier789$",
@@ -37,6 +43,18 @@
         "activated": 1675000000
       }
     },
-    "roles": ["user", "premium"]
+    "roles": [
+      "user",
+      "premium"
+    ]
+  },
+  "ddd": {
+    "password": "ddd",
+    "email": "ddd",
+    "phone": "ddd",
+    "products": {},
+    "roles": [
+      "user"
+    ]
   }
 }
