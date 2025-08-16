@@ -34,8 +34,7 @@
     "duration": 172800,
     "created": "2025-08-16",
     "generatedBy": "reseller1",
-    "claimed": true,
-    "claimedBy": "sss",
-    "claimedAt": "2025-08-16T05:32:06.195Z"
+    "claimed": false,
+
   }
 }
