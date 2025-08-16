@@ -21,5 +21,19 @@
     "duration": 604800,
     "created": "2023-01-02",
     "generatedBy": "reseller2"
+  },
+  "SLATE-5XN6-YWYW-KJNS": {
+    "product": "slate",
+    "duration": 172800,
+    "created": "2025-08-16",
+    "generatedBy": "reseller1",
+    "claimed": false
+  },
+  "SLATE-POZQ-NZNW-3QID": {
+    "product": "slate",
+    "duration": 172800,
+    "created": "2025-08-16",
+    "generatedBy": "reseller1",
+    "claimed": false
   }
 }
