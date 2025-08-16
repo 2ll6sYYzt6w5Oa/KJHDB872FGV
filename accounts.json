@@ -47,5 +47,14 @@
     "roles": [
       "user"
     ]
+  },
+  "sss": {
+    "password": "sss",
+    "email": "sss",
+    "phone": "sss",
+    "products": {},
+    "roles": [
+      "user"
+    ]
   }
 }
